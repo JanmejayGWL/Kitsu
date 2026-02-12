@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valentine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Pacifico&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        /* --- GENERAL STYLES --- */
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            font-family: 'Fredoka One', cursive; 
+            background-image: url('assets/images/bg.png');
+            background-repeat: repeat;
+            background-size: 300px;
+            background-color: #ffcce0; 
+            overflow: hidden; 
+            color: #d32f2f; 
+        }
+        
+        .app-container { width: 100%; height: 100%; position: relative; z-index: 2; }
+        
+        /* Physics Canvas (The Hearts Layer) */
+        #physics-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 50; pointer-events: none; /* Let clicks pass through */
+        }
+
+        .screen { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; 
+            opacity: 0; pointer-events: none; transition: all 0.8s ease; transform: scale(0.95); 
+            padding: 20px; box-sizing: border-box; 
+            background: rgba(255, 255, 255, 0.5); 
+            backdrop-filter: blur(2px);
+        }
+        .screen.active { opacity: 1; pointer-events: all; transform: scale(1); z-index: 10; }
+        
+        h1 { font-family: 'Pacifico', cursive; font-size: 3rem; margin-bottom: 20px; text-shadow: 2px 2px 0px rgba(255,255,255,0.8); }
+        img.mascot { width: 200px; height: auto; margin-bottom: 20px; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.1)); animation: bounce 2s infinite ease-in-out; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+        
+        /* --- BUTTONS --- */
+        .btn-container { position: relative; width: 100%; min-height: 80px; display: flex; justify-content: center; align-items: center; gap: 20px; }
+        button { padding: 15px 40px; font-size: 1.2rem; font-family: 'Fredoka One', cursive; border: none; border-radius: 50px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.1); z-index: 50;}
+        button:hover { transform: scale(1.1); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+        .btn-yes { background-color: #ff4081; color: white; }
+        
+        .no-btn-wrapper { width: 250px; height: 70px; display: flex; justify-content: center; align-items: center; }
+        .btn-no { background-color: #ffffff; color: #ff4081; position: relative; transition: left 0.3s ease-out, top 0.3s ease-out; } 
+        .btn-nav { background-color: #ff80ab; color: white; padding: 10px 20px; font-size: 1rem; margin-top: 20px; z-index: 100; position: relative;}
+        
+        #gallery-back-btn { margin-top: 50px; }
+
+        /* --- GIFT STYLES --- */
+        .gift-grid { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 800px; }
+        .gift-box { width: 140px; height: 140px; background: white; border-radius: 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.4s ease; box-shadow: 0 8px 20px rgba(194, 24, 91, 0.15); }
+        .gift-box:hover { transform: translateY(-10px) rotate(2deg); background: #fff0f5; }
+        .gift-box span { font-size: 3rem; }
+        .gift-box p { margin-top: 10px; color: #c2185b; }
+        .meme-img { max-width: 300px; border-radius: 15px; border: 5px solid white; transform: rotate(-3deg); }
+        
+        /* --- MUSIC CONTROL --- */
+        .music-wrapper { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .music-btn { background: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.2); transition: transform 0.2s; position: relative; overflow: hidden; }
+        .music-btn.muted::after { content: ''; position: absolute; width: 100%; height: 3px; background-color: #d32f2f; transform: rotate(45deg); }
+        .music-btn:active { transform: scale(0.9); }
+        .vol-slider-container { background: white; padding: 10px 5px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); display: none; animation: fadeIn 0.3s; }
+        .music-wrapper:hover .vol-slider-container { display: block; }
+        input[type=range] { -webkit-appearance: none; width: 10px; height: 100px; background: transparent; writing-mode: bt-lr; -webkit-appearance: slider-vertical; cursor: pointer; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- HOME BUTTON --- */
+        .home-btn {
+            position: fixed; bottom: 20px; left: 20px; z-index: 200;
+            background: white; width: 50px; height: 50px; border-radius: 50%;
+            display: none; justify-content: center; align-items: center;
+            font-size: 24px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .home-btn:active { transform: scale(0.9); }
+
+        /* --- DATE MODAL --- */
+        .date-input { padding: 15px; font-size: 1.2rem; border-radius: 30px; border: 2px solid #ff4081; text-align: center; outline: none; margin-bottom: 20px; }
+        #modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); z-index: 200; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        #modal-overlay.show { opacity: 1; pointer-events: all; }
+        .modal-box { background: white; padding: 40px; border-radius: 25px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); text-align: center; transform: translateY(-50px); opacity: 0; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); max-width: 90%; }
+        #modal-overlay.show .modal-box { transform: translateY(0); opacity: 1; }
+        #angry-img { width: 250px; height: auto; margin-bottom: 15px; }
+
+        /* --- CARD STACK ANIMATION --- */
+        .card-stack { position: relative; width: 300px; height: 400px; margin: 0 auto; cursor: pointer; perspective: 1200px; }
+        
+        .card-photo { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            object-fit: cover; border-radius: 15px; 
+            border: 8px solid white; border-bottom: 40px solid white; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2); 
+            will-change: transform, box-shadow;
+        }
+        .card-photo.animate-out { animation: reshuffle 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        @keyframes reshuffle {
+            0% { transform: translate(0, 0) rotate(var(--r)) scale(1); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+            50% { transform: translate(250px, -40px) rotate(25deg) scale(1.1); box-shadow: -30px 50px 60px rgba(0,0,0,0.3); z-index: 1000; }
+            100% { transform: translate(0, 0) rotate(var(--r-new)) scale(1); box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 1000; }
+        }
+
+        /* --- SURPRISE OVERLAY --- */
+        #surprise-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); z-index: 300;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white; opacity: 0; pointer-events: none; transition: opacity 0.5s; cursor: pointer;
+        }
+        #surprise-overlay.show { opacity: 1; pointer-events: all; }
+        #surprise-text { font-size: 3rem; margin-bottom: 20px; font-family: 'Fredoka One', cursive; z-index: 501; }
+        #surprise-img { display: none; max-width: 90%; max-height: 80vh; border: 10px solid white; border-radius: 20px; box-shadow: 0 0 50px rgba(255,255,255,0.5); z-index: 500; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+        .emoji-rain { position: fixed; top: -50px; font-size: 30px; z-index: 400; animation: fall linear forwards; }
+        @keyframes fall { to { transform: translateY(120vh); } }
+
+        /* --- LETTER & ENVELOPE STYLES --- */
+        
+        .envelope-wrapper {
+            width: 300px; height: 200px; position: relative; cursor: pointer;
+            transition: transform 0.3s; z-index: 20;
+        }
+        .envelope-wrapper:hover { transform: scale(1.05); }
+        
+        .envelope-body {
+            position: absolute; bottom: 0; width: 100%; height: 100%;
+            background: #ff4081; border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .envelope-body::after { 
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            border-right: 150px solid #f50057; border-bottom: 100px solid transparent; border-top: 100px solid transparent;
+            transform: rotate(90deg) translate(-50px, -50px);
+        }
+        .envelope-flap {
+            position: absolute; top: 0; left: 0; width: 0; height: 0;
+            border-left: 150px solid transparent; border-right: 150px solid transparent;
+            border-top: 110px solid #ff80ab;
+            transform-origin: top; transition: transform 0.5s; z-index: 25;
+        }
+        .envelope-wrapper:hover .envelope-flap { transform: rotateX(180deg); }
+        .wax-seal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 3rem; z-index: 30; text-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        /* Fixed Paper Overlay Structure */
+        .paper-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1000; /* Above physics canvas */
+            display: flex; justify-content: center; align-items: flex-start; /* Important for scrolling */
+            overflow-y: auto; /* Enable scrolling */
+            opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+            background: transparent;
+        }
+        .paper-overlay.open { opacity: 1; pointer-events: all; }
+        
+        .paper-content {
+            background: #fff9c4; 
+            width: 90%; max-width: 500px;
+            /* Layout Fixes */
+            min-height: 80vh; 
+            margin: 40px auto; 
+            padding: 30px; 
+            box-sizing: border-box;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; align-items: center;
+            font-family: 'Pacifico', cursive; color: #5d4037; line-height: 1.6;
+            transform: translateY(50px); transition: transform 0.8s ease;
+            border-radius: 5px;
+            position: relative;
+        }
+        .paper-overlay.open .paper-content { transform: translateY(0); }
+
+        .letter-pic {
+            width: 80%; height: auto;
+            border: 8px solid white; box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transform: rotate(-2deg); margin-bottom: 20px;
+        }
+        .letter-text { font-size: 1.2rem; text-align: left; width: 100%; white-space: pre-wrap; margin-bottom: 10px; }
+        .signature { align-self: flex-start; margin-top: 10px; margin-bottom: 30px; font-size: 1.3rem; }
+
+        .vinyl-record { width: 200px; height: 200px; background: black; border-radius: 50%; display: flex; justify-content: center; align-items: center; animation: spin 4s linear infinite; border: 5px solid #333; }
+        .vinyl-label { width: 80px; height: 80px; background: #ff4081; border-radius: 50%; border: 20px solid #ff80ab; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    
+    <canvas id="physics-canvas"></canvas>
+
+    <audio id="bg-music" loop>
+        <source src="assets/audios/music.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="sfx-woosh">
+        <source src="assets/audios/woosh.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="sfx-laugh">
+        <source src="assets/audios/laugh.mp3" type="audio/mpeg">
+    </audio>
+    
+    <div id="home-btn" class="home-btn" onclick="goToPage('page-ask')">🏠</div>
+
+    <div class="music-wrapper">
+        <div class="vol-slider-container">
+            <input type="range" id="vol-slider" min="0" max="1" step="0.05" value="1" orient="vertical" oninput="adjustVolume(this.value)">
+        </div>
+        <div id="music-btn" class="music-btn" onclick="toggleMusic()">🎵</div>
+    </div>
+
+    <div id="modal-overlay" onclick="closeAngryModal()">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <img id="angry-img" src="assets/images/angry.png" alt="Wrong Date">
+            <h2 style="color: #d32f2f; margin: 0;">WRONG DATE! 😡</h2>
+            <p>Try again...</p>
+            <button class="btn-yes" onclick="closeAngryModal()">Okay Sorry</button>
+        </div>
+    </div>
+
+    <div id="surprise-overlay" onclick="closeSurprise()">
+        <h1 id="surprise-text">Wait...</h1>
+        <img id="surprise-img" src="assets/images/surprise.jpg" alt="Best Photo Ever">
+    </div>
+
+    <div id="full-paper-overlay" class="paper-overlay">
+        <div class="paper-content">
+            <img src="assets/images/10.jpg" class="letter-pic" alt="Us">
+            <div id="typewriter-text" class="letter-text"></div>
+            <p class="signature" id="signature" style="opacity: 0;">Love always,<br>Me.</p>
+            <button class="btn-nav" onclick="closeLetterAndGoToMenu()">Back</button>
+        </div>
+    </div>
+
+    <div class="app-container">
+
+        <div id="page-lock" class="screen active">
+            <h1>whats our special date</h1>
+            <p>(Format: DD/MM/YYYY)</p>
+            <input type="text" id="date-lock" class="date-input" placeholder="e.g. 14/02/2026">
+            <button class="btn-yes" onclick="checkDate()">Unlock ❤️</button>
+        </div>
+
+        <div id="page-ask" class="screen">
+            <img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3R6bWl4eHl5eDk3djZ6Y3pmZ2d6eGZ6Z3R6Z3R6Z3R6Z3R6eiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/MDJ9IbxxvDUQM/giphy.gif" class="mascot">
+            <h1>Will you be my Valentine?</h1>
+            <div class="btn-container">
+                <button id="btn-yes" class="btn-yes" onclick="goToPage('page-success')">YES OF COURSE</button>
+                <div class="no-btn-wrapper">
+                    <button id="btn-no" class="btn-no" onclick="goToPage('page-sad')" onmouseover="dodgeButton()">NO THANK YOU</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-sad" class="screen">
+            <img src="assets/images/meme.png" class="meme-img" alt="Sad Meme">
+            <h1>You broke my heart...</h1>
+            <button class="btn-yes" onclick="goToPage('page-ask')">Try Again Please</button>
+        </div>
+
+        <div id="page-success" class="screen">
+            <div style="font-size: 5rem;">🎉</div>
+            <h1>Yay! I knew it!</h1>
+            <p>Here are your gifts:</p>
+            <div class="gift-grid">
+                <div class="gift-box" onclick="goToPage('page-gift-1')"><span>🌹</span><p>Flowers</p></div>
+                <div class="gift-box" onclick="goToPage('page-gift-2')"><span>💌</span><p>Letter</p></div>
+                <div class="gift-box" onclick="goToPage('page-gift-3')"><span>🎵</span><p>Music</p></div>
+                <div class="gift-box" onclick="goToPage('page-gift-4')"><span>📸</span><p>Memories</p></div>
+            </div>
+        </div>
+
+        <div id="page-gift-1" class="screen">
+            <h1>For You</h1>
+            <div style="font-size: 10rem;">💐</div>
+            <p>You are the most beautiful flower in my garden.</p>
+            <button class="btn-nav" onclick="goToPage('page-success')">Back</button>
+        </div>
+
+        <div id="page-gift-2" class="screen">
+            <h1>A Letter For You...</h1>
+            <br><br>
+            <div class="envelope-wrapper" onclick="triggerLetterOpening()">
+                <div class="envelope-flap"></div>
+                <div class="envelope-body"></div>
+                <div class="wax-seal">❤️</div>
+            </div>
+            <p style="margin-top: 20px; font-size: 0.9rem;">(Tap to open)</p>
+            <button class="btn-nav" onclick="goToPage('page-success')">Back</button>
+        </div>
+
+        <div id="page-gift-3" class="screen">
+            <h1>Our Vibe</h1>
+            <div class="vinyl-record"><div class="vinyl-label"></div></div>
+            <br>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://www.youtube.com/watch?v=izGwDsrQ1eQ" style="border-radius: 10px; border: 4px solid white;">
+            <p>Scan to play!</p>
+            <button class="btn-nav" onclick="goToPage('page-success')">Back</button>
+        </div>
+
+        <div id="page-gift-4" class="screen">
+            <h1>Us ❤️</h1>
+            <p style="margin-bottom: 20px; font-size: 0.9rem;">(Tap the stack to see more... keep going!)</p>
+            
+            <div class="card-stack" id="stack-container" onclick="cycleStack()">
+                </div>
+
+            <button id="gallery-back-btn" class="btn-nav" onclick="goToPage('page-success')">Back</button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const CORRECT_DATE = "03/09/2025"; 
+        const LETTER_TEXT = "To my love,\n\nThank you for making every day special. You are my favorite person in the whole world. I love how we laugh together, how we grow together, and just being with you makes everything better.\n\nHere is to many more memories."; 
+        const TOTAL_PHOTOS = 12;
+
+        // --- NAVIGATION ---
+        function goToPage(pageId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            
+            // Cleanup Physics if leaving letter page
+            if (pageId !== 'page-gift-2') {
+                document.getElementById('full-paper-overlay').classList.remove('open');
+                stopHeartRain();
+            }
+
+            if (pageId === 'page-ask') resetButtons();
+            setTimeout(() => {
+                document.getElementById(pageId).classList.add('active');
+                if (pageId === 'page-success') confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                if (pageId === 'page-gift-4') initStack(); 
+            }, 100);
+        }
+
+        // --- PHYSICS ENGINE LOGIC (Fixed for Hearts) ---
+        let engine, render, runner;
+        let isRaining = false;
+        let heartImage = new Image();
+        
+        // Create an offscreen canvas to draw a perfect heart once
+        function createHeartTexture() {
+            const canvas = document.createElement('canvas');
+            const size = 100; // Resolution of texture
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#ff0040';
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 6;
+            
+            // Standard Heart Path
+            ctx.beginPath();
+            const topCurveHeight = size * 0.3;
+            ctx.moveTo(size/2, size * 0.2);
+            ctx.bezierCurveTo(size/2, size*0.1, 0, 0, 0, size*0.4);
+            ctx.bezierCurveTo(0, size*0.7, size/2, size*0.9, size/2, size);
+            ctx.bezierCurveTo(size/2, size*0.9, size, size*0.7, size, size*0.4);
+            ctx.bezierCurveTo(size, 0, size/2, size*0.1, size/2, size*0.2);
+            ctx.closePath();
+            
+            ctx.fill();
+            ctx.stroke();
+            
+            heartImage.src = canvas.toDataURL();
+        }
+        
+        createHeartTexture(); // Generate texture on load
+
+        function initPhysics() {
+            const canvas = document.getElementById('physics-canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const Engine = Matter.Engine,
+                  Bodies = Matter.Bodies,
+                  Composite = Matter.Composite;
+
+            engine = Engine.create();
+            
+            // Walls to keep hearts on screen
+            const wallThick = 200;
+            const ground = Bodies.rectangle(window.innerWidth / 2, window.innerHeight + wallThick/2, window.innerWidth + 200, wallThick, { isStatic: true });
+            const leftWall = Bodies.rectangle(0 - wallThick/2, window.innerHeight / 2, wallThick, window.innerHeight * 5, { isStatic: true });
+            const rightWall = Bodies.rectangle(window.innerWidth + wallThick/2, window.innerHeight / 2, wallThick, window.innerHeight * 5, { isStatic: true });
+            
+            Composite.add(engine.world, [ground, leftWall, rightWall]);
+
+            (function renderLoop() {
+                if(!isRaining) return; 
+                
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                const bodies = Composite.allBodies(engine.world);
+                
+                bodies.forEach(body => {
+                    if (body.isStatic) return; 
+                    const { x, y } = body.position;
+                    const angle = body.angle;
+                    const size = body.circleRadius * 2.2; // Adjust visual size relative to physics body
+
+                    ctx.save();
+                    ctx.translate(x, y);
+                    ctx.rotate(angle);
+                    ctx.drawImage(heartImage, -size/2, -size/2, size, size);
+                    ctx.restore();
+                });
+                
+                Matter.Engine.update(engine, 1000 / 60);
+                requestAnimationFrame(renderLoop);
+            })();
+        }
+
+        function triggerLetterOpening() {
+            playWoosh();
+            isRaining = true;
+            initPhysics();
+            
+            let count = 0;
+            const interval = setInterval(() => {
+                if(!isRaining) { clearInterval(interval); return; }
+                spawnHeartBody();
+                count++;
+                if (count > 500) clearInterval(interval); // Increased limit to fill screen
+            }, 10); // Faster spawn
+
+            setTimeout(() => {
+                document.getElementById('full-paper-overlay').classList.add('open');
+                typeWriter(); 
+            }, 1500); // Wait a bit longer for hearts to pile
+        }
+
+        function spawnHeartBody() {
+            if (!engine) return;
+            const Bodies = Matter.Bodies;
+            const Composite = Matter.Composite;
+            
+            const x = Math.random() * window.innerWidth;
+            const size = Math.random() * 20 + 20; // Radius (Physics size)
+            
+            const heart = Bodies.circle(x, -50, size, {
+                restitution: 0.3, 
+                friction: 0.1,
+                density: 0.04
+            });
+            
+            Composite.add(engine.world, heart);
+        }
+
+        function stopHeartRain() {
+            isRaining = false;
+            if(engine) {
+                Matter.World.clear(engine.world);
+                Matter.Engine.clear(engine);
+                engine = null;
+            }
+            const canvas = document.getElementById('physics-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // --- NEW FUNCTION: Close letter & go straight to 4 Gifts ---
+        function closeLetterAndGoToMenu() {
+            document.getElementById('full-paper-overlay').classList.remove('open');
+            stopHeartRain();
+            // Force jump to success page (The 4 gifts)
+            goToPage('page-success');
+        }
+
+        // --- TYPEWRITER ---
+        let typeI = 0;
+        function typeWriter() {
+            const el = document.getElementById("typewriter-text"); 
+            const sig = document.getElementById("signature");
+            el.innerHTML = ""; 
+            sig.style.opacity = 0;
+            typeI = 0;
+            
+            function type() { 
+                if (typeI < LETTER_TEXT.length) { 
+                    el.innerHTML += LETTER_TEXT.charAt(typeI); 
+                    typeI++; 
+                    setTimeout(type, 40); 
+                } else {
+                    sig.style.transition = "opacity 1s";
+                    sig.style.opacity = 1;
+                }
+            }
+            type();
+        }
+
+        // --- DODGING BUTTON LOGIC ---
+        function dodgeButton() {
+            if (Math.random() < 0.05) return; 
+            const btn = document.getElementById('btn-no');
+            if (btn.style.position !== 'fixed') {
+                btn.style.width = btn.offsetWidth + 'px';
+                btn.style.height = btn.offsetHeight + 'px';
+            }
+            btn.style.position = 'fixed';
+            const currentRect = btn.getBoundingClientRect();
+            const range = 250; 
+            const maxX = window.innerWidth - btn.offsetWidth;
+            const maxY = window.innerHeight - btn.offsetHeight;
+            let shiftX = (Math.random() - 0.5) * range * 2;
+            let shiftY = (Math.random() - 0.5) * range * 2;
+            if (Math.abs(shiftX) < 50) shiftX = 50 * (Math.random() > 0.5 ? 1 : -1);
+            if (Math.abs(shiftY) < 50) shiftY = 50 * (Math.random() > 0.5 ? 1 : -1);
+            let newX = currentRect.left + shiftX;
+            let newY = currentRect.top + shiftY;
+            if (newX < 20) newX = 20; if (newX > maxX) newX = maxX;
+            if (newY < 20) newY = 20; if (newY > maxY) newY = maxY;
+            btn.style.left = newX + 'px'; btn.style.top = newY + 'px';
+        }
+
+        function resetButtons() {
+            const btn = document.getElementById('btn-no');
+            btn.style.position = 'relative'; btn.style.left = 'auto'; btn.style.top = 'auto';
+            btn.style.width = 'auto'; btn.style.height = 'auto';
+        }
+
+        // --- MUSIC CONTROL ---
+        function toggleMusic() {
+            const audio = document.getElementById('bg-music');
+            const slider = document.getElementById('vol-slider');
+            const btn = document.getElementById('music-btn');
+            if (audio.volume > 0 && !audio.paused) {
+                audio.volume = 0; slider.value = 0; btn.classList.add('muted');
+            } else {
+                audio.volume = 0.5; slider.value = 0.5;
+                audio.play().catch(e => console.log("User interaction needed"));
+                btn.classList.remove('muted');
+            }
+        }
+        function adjustVolume(val) {
+            const audio = document.getElementById('bg-music');
+            const btn = document.getElementById('music-btn');
+            audio.volume = val;
+            if (val > 0) {
+                btn.classList.remove('muted');
+                if (audio.paused) audio.play().catch(e => console.log("User interaction needed"));
+            } else { btn.classList.add('muted'); }
+        }
+
+        // --- AUDIO HELPERS ---
+        function playWoosh() {
+            const woosh = document.getElementById('sfx-woosh');
+            woosh.currentTime = 0;
+            woosh.play().catch(e => {});
+        }
+
+        function playLaugh() {
+            const laugh = document.getElementById('sfx-laugh');
+            laugh.currentTime = 0;
+            laugh.play().catch(e => {});
+        }
+
+        // --- DATE LOCK & ANGRY MODAL ---
+        let angryInterval;
+        const angryImages = ['assets/images/angry.png', 'assets/images/angry2.png', 'assets/images/angry3.png'];
+
+        function checkDate() {
+            const input = document.getElementById('date-lock').value;
+            if (input === CORRECT_DATE) {
+                const audio = document.getElementById('bg-music');
+                audio.volume = 1.0; document.getElementById('vol-slider').value = 1.0;
+                audio.play().catch(e => console.log("Audio requires interaction"));
+                document.getElementById('home-btn').style.display = 'flex';
+                goToPage('page-ask');
+            } else { showAngryModal(); }
+        }
+        function showAngryModal() {
+            const modal = document.getElementById('modal-overlay'); modal.classList.add('show');
+            let idx = 0; const imgEl = document.getElementById('angry-img'); imgEl.src = angryImages[0];
+            if(angryInterval) clearInterval(angryInterval);
+            angryInterval = setInterval(() => { idx = (idx + 1) % angryImages.length; imgEl.src = angryImages[idx]; }, 1300);
+        }
+        function closeAngryModal() { document.getElementById('modal-overlay').classList.remove('show'); clearInterval(angryInterval); }
+
+        // --- CARD STACK LOGIC ---
+        let stackInitialized = false;
+        let currentZ = 100; 
+        let clickCount = 0; 
+        let isSurpriseRunning = false; 
+
+        function initStack() {
+            if(stackInitialized) return;
+            const container = document.getElementById('stack-container');
+            container.innerHTML = ''; 
+
+            for(let i = 1; i <= TOTAL_PHOTOS; i++) {
+                const img = document.createElement('img');
+                img.src = `assets/images/${i}.JPG`;
+                img.classList.add('card-photo');
+                img.style.zIndex = i;
+                const rot = (Math.random() * 10 - 5).toFixed(1) + 'deg';
+                img.style.setProperty('--r', rot);
+                img.style.transform = `rotate(${rot})`;
+                img.id = `card-${i}`;
+                container.appendChild(img);
+            }
+            stackInitialized = true;
+            currentZ = 100;
+            clickCount = 0;
+            isSurpriseRunning = false;
+        }
+
+        function cycleStack() {
+            if(isSurpriseRunning) return;
+            const cards = Array.from(document.querySelectorAll('.card-photo'));
+            clickCount++;
+            if (clickCount >= TOTAL_PHOTOS + 1) { 
+                triggerBestPhotoSurprise();
+                return;
+            }
+            playWoosh();
+            let backCard = cards[0];
+            let minZ = parseInt(backCard.style.zIndex);
+            cards.forEach(c => {
+                const z = parseInt(c.style.zIndex);
+                if (z < minZ) { minZ = z; backCard = c; }
+            });
+            const newRot = (Math.random() * 20 - 10).toFixed(1) + 'deg';
+            backCard.style.setProperty('--r-new', newRot);
+            backCard.classList.add('animate-out');
+            setTimeout(() => { currentZ++; backCard.style.zIndex = currentZ; }, 300);
+            setTimeout(() => { backCard.classList.remove('animate-out'); backCard.style.setProperty('--r', newRot); }, 700); 
+        }
+
+        // --- BEST PHOTO SURPRISE ---
+        let rainInterval; 
+        let canCloseSurprise = false; 
+
+        function triggerBestPhotoSurprise() {
+            isSurpriseRunning = true; 
+            canCloseSurprise = false; 
+            const overlay = document.getElementById('surprise-overlay');
+            const text = document.getElementById('surprise-text');
+            const img = document.getElementById('surprise-img');
+            overlay.classList.add('show');
+            text.innerText = "Want to see the best photo ever?";
+            text.style.display = 'block';
+            img.style.display = 'none';
+            setTimeout(() => { text.innerText = "3..."; }, 2000);
+            setTimeout(() => { text.innerText = "2..."; }, 3000);
+            setTimeout(() => { text.innerText = "1..."; }, 4000);
+            setTimeout(() => { 
+                text.style.display = 'none'; 
+                img.style.display = 'block'; 
+                playLaugh();
+                startEmojiRain();
+                canCloseSurprise = true; 
+            }, 5000);
+        }
+
+        function startEmojiRain() {
+            if(rainInterval) clearInterval(rainInterval);
+            rainInterval = setInterval(() => {
+                const emoji = document.createElement('div');
+                emoji.classList.add('emoji-rain');
+                emoji.innerText = '😂';
+                emoji.style.left = Math.random() * 100 + 'vw';
+                emoji.style.animationDuration = (Math.random() * 2 + 2) + 's'; 
+                emoji.style.fontSize = (Math.random() * 20 + 20) + 'px';
+                document.body.appendChild(emoji);
+                setTimeout(() => { emoji.remove(); }, 4000);
+            }, 50); 
+        }
+        
+        function closeSurprise() {
+            if(!canCloseSurprise) return;
+            const overlay = document.getElementById('surprise-overlay');
+            if(overlay.classList.contains('show')) {
+                overlay.classList.remove('show');
+                if(rainInterval) clearInterval(rainInterval);
+                document.querySelectorAll('.emoji-rain').forEach(e => e.remove());
+                goToPage('page-success');
+                isSurpriseRunning = false; 
+            }
+        }
+    </script>
+</body>
+</html>
